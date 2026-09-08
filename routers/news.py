@@ -43,10 +43,8 @@ async def list_news(
         # 文档未提及keyword，可忽略
     )
     items, total = await get_news_list(db, params)
-    # 转换为NewsOut
-    out_items = [NewsOut.model_validate(item) for item in items]
     response_data = NewsListResponse.from_pagination(
-        items=out_items,
+        items=items,
         total=total,
         page=page,
         page_size=pageSize
@@ -61,23 +59,12 @@ async def get_news_detail(
     db: AsyncSession = Depends(get_db)
 ):
     """获取新闻详情（同时增加浏览量）"""
-    news = await get_news_by_id(db, id)
-    if not news:
+    # 获取详情（此时 views 可能来自缓存）
+    detail  = await get_news_by_id(db, id)
+    if not detail:
         raise HTTPException(status_code=404, detail="新闻不存在")
     # 增加浏览量（异步执行）
-    await increment_views(db, id)
-    await db.refresh(news)
-
-    # 构建详情数据，related_news 暂时为空列表
-    detail = NewsDetail(
-        id=news.id,
-        title=news.title,
-        content=news.content,
-        image=news.image,
-        author=news.author,
-        publish_time=news.publish_time,
-        category_id=news.category_id,
-        views=news.views,
-        related_news=[]   # 后续可实现推荐逻辑
-    )
+    await increment_views(id)
+    # 重新获取详情（此时 detail.views 已更新为最新值，因为 get_news_by_id 内部会从 Redis 读取 views）
+    detail  = await get_news_by_id(db, id)
     return ApiResponse(data=detail.model_dump())

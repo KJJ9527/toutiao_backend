@@ -9,7 +9,19 @@ from database import AsyncSessionLocal
 from routers import news, favorite, user, history
 from schemas.common import ApiResponse
 
-app = FastAPI()
+from contextlib import asynccontextmanager
+from utils.cache import init_redis, close_redis
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时
+    await init_redis()
+    print("Redis connected")
+    yield
+    # 关闭时
+    await close_redis()
+    print("Redis closed")
+app = FastAPI(lifespan=lifespan)
 
 @app.on_event("startup")
 async def startup_event():
@@ -52,6 +64,8 @@ async def general_exception_handler(request, exc):
             data=None
         ).model_dump()
     )
+
+
 
 # ========== CORS 配置 ==========
 origins = [
